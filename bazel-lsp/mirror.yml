@@ -1,0 +1,201 @@
+name: bazel-lsp
+
+# Logical index package `bazel-lsp/bazel-lsp` at the physical path
+# `ghcr.io/ocx-contrib/bazel-lsp/bazel-lsp` — slash segments, never
+# hyphen-flattened. The first segment must be this repo's own GitHub owner:
+# GITHUB_TOKEN only authorises packages owned by the repo the workflow runs in.
+#
+# Namespace rule 4 (solo tool published under a personal handle → the tool names
+# itself). Upstream is `cameron-martin/bazel-lsp`; a `cameron-martin/` namespace
+# would encode a maintainer handle that ages badly — the same mistake that
+# would have produced `stedolan/jq` in 2022. Provenance is not lost: it is
+# recorded verifiably in the index claim's `upstream.{org, repository_url}`.
+#
+# NOT under `bazelbuild/` — that namespace is the Bazel project's own identity
+# and this tool is third-party, not published by them.
+target:
+  registry: ghcr.io
+  repository: ocx-contrib/bazel-lsp/bazel-lsp
+
+source:
+  type: github_release
+  owner: cameron-martin
+  repo: bazel-lsp
+  tag_pattern: "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
+
+skip_prereleases: true
+cascade: true
+build_timestamp: date
+
+verify:
+  github_asset_digest: true
+
+concurrency:
+  # Assets are single ~9-11 MB binaries.
+  max_downloads: 8
+  max_bundles: 4
+  max_pushes: 2
+  rate_limit_ms: 100
+  max_retries: 3
+  compression_threads: 0
+
+# `off`, and it cannot be otherwise here. The scan only looks BELOW an interface
+# PATH entry of the form ${installPath}/<dir>, and a raw-binary mirror has none
+# — the executable IS the content root, so PATH is a bare ${installPath}.
+# `auto`/`verify` is rejected at spec load with exit 65. `off` plus a
+# hand-listed `binaries` in metadata.json is the blessed shape for
+# `asset_type: binary`.
+bin_scan: off
+
+# ─── libc gate (Phase 3.5) — the evidence, not the conclusion ───────────────
+#
+# bazel-lsp is a Rust binary built with Bazel against the default `gnu` target.
+# Upstream ships ONE Linux build per arch and it is DYNAMICALLY linked against
+# glibc — there is no musl variant to split against. Measured on v0.6.4:
+#
+#   $ file bazel-lsp-0.6.4-linux-amd64
+#   ELF 64-bit LSB pie executable, x86-64, dynamically linked,
+#   interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 2.0.0, stripped
+#   $ readelf -d … | grep NEEDED
+#   libm.so.6  libpthread.so.0  libc.so.6  libdl.so.2  ld-linux-x86-64.so.2
+#   $ readelf -V … | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1   → GLIBC_2.17
+#
+#   $ file bazel-lsp-0.6.4-linux-arm64
+#   ELF 64-bit LSB pie executable, ARM aarch64, dynamically linked,
+#   interpreter /lib/ld-linux-aarch64.so.1, for GNU/Linux 2.0.0, stripped
+#   $ readelf -V … | tail -1                                        → GLIBC_2.17
+#
+# PT_INTERP names the glibc loader on both arches, so both Linux keys carry
+# `+libc.glibc` — a bare key would claim the artifact runs under any Linux
+# userland and it would die at exec on musl. The glibc floor is 2.17 on both
+# arches (measured separately — they come off different toolchains); the
+# container legs below clear it by a wide margin.
+#
+# NO alpine leg: the renderer rejects a musl image under a `+libc.glibc` key,
+# and rightly — this artifact genuinely cannot load there.
+#
+# darwin is Mach-O per-arch (`Mach-O 64-bit arm64 executable` /
+# `… x86_64 executable`, no universal binary), windows is `PE32+ … x86-64`.
+# Neither has a libc family to qualify.
+#
+# ─── Scope
+#
+# Raw binaries — no archive. One file per platform, version embedded in the
+# asset name: `bazel-lsp-<version>-<os>-<arch>[.exe]`. Anchored ^…$ so nothing
+# else can match; a pattern matching zero assets is silently skipped, not an
+# error, which would yield a green run with a missing platform.
+#
+# Upstream ships no other platforms and no archives, checksums or signatures.
+#
+# ⚠️ STAGED ROLLOUT (Phase 10) — darwin (10× minutes) and windows (2×) are
+# commented out until the Linux legs are end-to-end green. A platform whose
+# `assets:` key is absent never enters a version's resolved set, so its
+# `platforms:` legs below self-skip for free. Uncomment by hand — never `sed`,
+# which rewrites `\\.` to `\.` on the replacement side — then re-run
+# `package validate` and `pipeline generate ci`.
+assets:
+  "linux/amd64+libc.glibc":
+    - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-linux-amd64$"
+  "linux/arm64+libc.glibc":
+    - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-linux-arm64$"
+  # ── Pass 2: darwin ────────────────────────────────────────────────────────
+  # darwin/amd64:
+  #   - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-osx-amd64$"
+  # darwin/arm64:
+  #   - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-osx-arm64$"
+  # ── Pass 3: windows ───────────────────────────────────────────────────────
+  # windows/amd64:
+  #   - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-windows-amd64\\.exe$"
+
+asset_type:
+  # Raw binaries on every platform. The asset name carries the version, so it
+  # must be renamed to the bare tool name or `bazel-lsp` never resolves on PATH.
+  default:
+    type: binary
+    name: bazel-lsp
+  platforms:
+    windows/amd64:
+      type: binary
+      name: bazel-lsp.exe
+
+# ─── Platform matrix + per-platform version applicability ───────────────────
+#
+# `platforms:` is DUAL-PURPOSE: it carries the runner/container matrix AND the
+# version window each platform is applicable to. Upstream added platforms over
+# time, so the windows and linux/arm64 keys carry a `min_version` rather than
+# the global `versions.min` being bumped to dodge them — an out-of-window
+# (version, platform) is never resolved, built, tested or pushed, and never
+# reds the run.
+#
+#   linux/amd64   0.1.1+   darwin/amd64  0.3.0+   darwin/arm64  0.3.1+
+#   windows/amd64 0.6.2+   linux/arm64   0.6.4+
+platforms:
+  "linux/amd64+libc.glibc":
+    runner: ubuntu-latest
+    containers:
+      - { image: "ubuntu:24.04", shell: bash }
+      - { image: "fedora:40", shell: bash }
+  "linux/arm64+libc.glibc":
+    # arm64 container legs run natively — no qemu — so the runner arch must
+    # match the platform or the renderer reds the leg up front.
+    runner: ubuntu-24.04-arm
+    min_version: "0.6.4"
+    containers:
+      - { image: "ubuntu:24.04", shell: bash }
+      - { image: "fedora:40", shell: bash }
+  darwin/amd64:
+    # Intel slice tested on the arm64 macos-14 runner via Rosetta 2 — GitHub's
+    # native macos-13 Intel pool is exhausted and deadlocks the push job.
+    runner: macos-14
+    prefix: ["arch", "-x86_64"]
+  darwin/arm64:
+    runner: macos-14
+    shell: bash
+  windows/amd64:
+    runner: windows-latest
+    shell: pwsh
+    min_version: "0.6.2"
+  # No `containers:` on darwin or windows — those runners have no Linux
+  # container engine, and the key is rejected at spec load.
+
+metadata:
+  # Resolves against THIS spec's directory. One file for every platform: the
+  # bundle's only PATH entry is a bare ${installPath} regardless of OS, because
+  # the executable is the content root.
+  default: metadata.json
+
+catalog:
+  logo: logo.svg
+
+versions:
+  # 0.6.x line. Below 0.6.0 upstream ships neither windows nor linux/arm64 and
+  # the binaries predate the current starlark-rust base.
+  min: "0.6.0"
+  new_per_run: 5
+  # Hash-staggered — sha3_256("bazel-lsp/bazel-lsp") % 360 → slot 108.
+  # A hand-picked minute synchronises the fleet's pushes and trips GHCR's
+  # secondary rate limit.
+  poll_interval: "48 1-23/6 * * *"
+
+tests:
+  # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and
+  # `catalog.logo` above, which resolve against this spec's own directory.
+  - name: smoke
+    script: bazel-lsp/tests/smoke.star
+
+annotations:
+  # From the Phase 1.5 license gate:
+  #   $ gh api repos/cameron-martin/bazel-lsp/license --jq '.license.spdx_id'
+  #   Apache-2.0
+  org.opencontainers.image.licenses: "Apache-2.0"
+
+notify:
+  discord:
+    webhook_secret: OCX_MIRROR_DISCORD_HOOK
+    user_id: "227748867204972545"  # pinged in-message on failures
+
+announce:
+  # Spelled out, not derived from target.repository — the logical name and the
+  # physical path are related by convention only.
+  package: bazel-lsp/bazel-lsp
+  fork: ocx-contrib/index

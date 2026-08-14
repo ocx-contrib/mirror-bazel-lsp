@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="bazel-lsp">
+  <title>bazel-lsp</title>
+  <!-- Original mark authored for the OCX catalog. Upstream
+       cameron-martin/bazel-lsp ships no logo file of any kind (verified: the
+       repository tree contains no .svg/.png/.ico). Deliberately NOT the Bazel
+       project's own mark — this is a third-party tool, not a Bazel-published
+       one, and reusing that mark would imply an endorsement that does not
+       exist. Starlark braces + a text cursor: a language server for .bzl. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3ea36a"/>
+      <stop offset="1" stop-color="#1d6b45"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#bg)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <!-- left brace -->
+    <path d="M 200 142 C 162 142 162 172 162 202 C 162 236 142 256 122 256 C 142 256 162 276 162 310 C 162 340 162 370 200 370" opacity="0.95"/>
+    <!-- right brace -->
+    <path d="M 312 142 C 350 142 350 172 350 202 C 350 236 370 256 390 256 C 370 256 350 276 350 310 C 350 340 350 370 312 370" opacity="0.95"/>
+  </g>
+  <!-- text cursor between the braces: the "language server" half of the mark -->
+  <rect x="246" y="174" width="20" height="164" rx="10" fill="#ffffff"/>
+</svg>
