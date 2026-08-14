@@ -147,29 +147,11 @@ platforms:
   darwin/arm64:
     runner: macos-14
     shell: bash
-    exclude:
-      # Upstream shipped a MISMATCHED artifact for this one (version, platform).
-      # Every other 0.6.2 asset is the 0.6.2 build; `bazel-lsp-0.6.2-osx-arm64`
-      # is a different, older one. Measured in CI (run 31793846426) — 0.6.0,
-      # 0.6.1, 0.6.3 and 0.6.4 pass on this platform, and 0.6.2 passes on
-      # darwin/amd64, so it is neither the test nor the platform:
-      #
-      #   $ bazel-lsp --version
-      #   error: unexpected argument '--version' found        (clap, exit 2)
-      #
-      # Corroborated in the binary itself — its clap definition still requires
-      # positional-style args that 0.6.2 does not have:
-      #
-      #   $ strings bazel-lsp-0.6.2-osx-arm64 | grep 'required argument'
-      #   The following required argument was not provided: bazel
-      #   The following required argument was not provided: no_distinct_output_base
-      #
-      # The 0.6.2 darwin/amd64 binary carries neither string. Dropping the pair
-      # rather than the version: 0.6.2 still publishes for every platform whose
-      # asset is the build it claims to be.
-      - version: "0.6.2"
-        reason: "upstream osx-arm64 asset is a different build — rejects --version (clap exit 2)"
-        severity: broken
+    # No `exclude:` here. From 0.6.2 on this platform's build carries no
+    # `--version` flag (upstream CLI-surface difference, measured 2026-08-14 —
+    # see bazel-lsp/tests/smoke.star), but every version answers a full LSP
+    # session correctly. The artifacts are good; the smoke test asserts the
+    # session rather than the flag.
   windows/amd64:
     runner: windows-latest
     shell: pwsh

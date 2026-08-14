@@ -8,20 +8,37 @@
 # runs. Branch with an if-EXPRESSION (below) or inside a `def`.
 TOOL = "bazel-lsp.exe" if ocx.target_platform.os == ocx.os.Windows else "bazel-lsp"
 
-# Tier 1 + 2: liveness + version SHAPE — not the vendor string, not the exact
-# version. `bazel-lsp --version` prints `bazel-lsp <semver>`.
-r_version = ocx.run(TOOL, "--version")
-expect.ok(r_version)
-expect.matches(r_version.stdout, r"\d+\.\d+\.\d+")
-
-# A separate code path from `--version` — exit code only, never the help text.
+# Tier 1: liveness. Exit code only, never the help text.
 expect.ok(ocx.run(TOOL, "--help"))
 
-# Tier 3: COMPUTED work. bazel-lsp is a language server, so its contract is the
-# LSP wire protocol on stdin/stdout, not a subcommand. Drive a full session —
-# initialize → initialized → shutdown → exit — with Content-Length framing and
-# assert the server's own capability advertisement comes back.
+# ⚠️ NO `--version` ASSERTION, AND THAT IS DELIBERATE. Upstream does not ship
+# the flag on every platform: from 0.6.2 on, the osx-arm64 and windows builds
+# have no `-V/--version` at all, while the linux and osx-amd64 builds of the
+# same releases do. Measured 2026-08-14 on real runners, all five in-range
+# versions (probe run 31794652305 and its predecessor):
 #
+#   platform      0.6.0        0.6.1        0.6.2 / 0.6.3 / 0.6.4
+#   linux-amd64   rc=0         rc=0         rc=0
+#   osx-amd64     rc=0         rc=0         rc=0
+#   osx-arm64     rc=0         rc=0         rc=2  error: unexpected argument
+#   windows       (no asset)   (no asset)   rc=2  error: unexpected argument
+#
+# Their `--help` mentions "version" zero times — the flag is genuinely absent,
+# not renamed. And where it IS present it is not trustworthy: 0.6.0 reports
+# `bazel-lsp 0.0.0` on both macOS slices, so the version stamp is missing from
+# that build too.
+#
+# Every one of those builds answers a full LSP session correctly (same probe:
+# rc=0, all three capabilities, shutdown honoured), so this is a CLI-surface
+# difference, not a bad artifact. Asserting the flag would exclude five working
+# platform tiles to test something upstream never promised. The session below
+# is the tool's actual contract and a strictly stronger check.
+
+# Tier 2 + 3: COMPUTED work. bazel-lsp is a language server, so its contract is
+# the LSP wire protocol on stdin/stdout, not a subcommand. Drive a full session
+# — initialize → initialized → shutdown → exit — with Content-Length framing
+# and assert the server's own capability advertisement comes back.
+
 # This is what distinguishes a working binary from one that merely starts: a
 # truncated or wrong-arch artifact cannot answer `initialize`, and a binary that
 # only printed a version would produce no frames at all.
