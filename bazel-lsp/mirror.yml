@@ -98,11 +98,10 @@ assets:
     - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-linux-amd64$"
   "linux/arm64+libc.glibc":
     - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-linux-arm64$"
-  # ── Pass 2: darwin ────────────────────────────────────────────────────────
-  # darwin/amd64:
-  #   - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-osx-amd64$"
-  # darwin/arm64:
-  #   - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-osx-arm64$"
+  darwin/amd64:
+    - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-osx-amd64$"
+  darwin/arm64:
+    - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-osx-arm64$"
   # ── Pass 3: windows ───────────────────────────────────────────────────────
   # windows/amd64:
   #   - "^bazel-lsp-\\d+\\.\\d+\\.\\d+-windows-amd64\\.exe$"
