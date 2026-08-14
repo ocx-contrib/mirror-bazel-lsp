@@ -23,6 +23,7 @@ jobs:
       - name: Probe
         shell: bash
         run: |
+          set +e   # a nonzero --version rc IS the measurement, not a failure
           for v in 0.6.0 0.6.1 0.6.2 0.6.3 0.6.4; do
             url="https://github.com/cameron-martin/bazel-lsp/releases/download/v${v}/bazel-lsp-${v}-${{ matrix.asset }}"
             if ! curl -sfL -o "tool${{ matrix.ext }}" "$url"; then
